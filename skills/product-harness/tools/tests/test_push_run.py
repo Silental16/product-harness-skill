@@ -300,6 +300,13 @@ class PushRunTests(unittest.TestCase):
         self.assertIn("skill_commit", meta)
         self.assertEqual(pr.SKILL_DIR, Path(pr.__file__).resolve().parents[1])
 
+    def test_payload_data_has_skill_version(self):
+        # шапка страницы прогона: «скилл <ветка> · <коммит>»
+        for version in (("lena/collect", "1a2b3c4+"), (None, "1a2b3c4"), (None, None)):
+            with self.subTest(version=version), mock.patch.object(pr, "skill_version", return_value=version):
+                data = pr.payload(self.run)["data"]
+                self.assertEqual((data["skill_branch"], data["skill_commit"]), version)
+
 
 # Временные репозитории: без глобального и системного конфига git, без поиска репозитория выше папки теста.
 GIT_ENV = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}

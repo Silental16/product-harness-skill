@@ -66,12 +66,6 @@ class CheckQuotesTests(unittest.TestCase):
         rows = cq.check_run(self.run)
         self.assertTrue(rows[0][2])
 
-    def test_segments_md_is_checked(self):
-        (self.run / "segments.md").write_text(
-            "- «другие ничего не платят» — [Форум](https://forum.example/t/1), без даты, src-001\n", encoding="utf-8")
-        q, st, _ = cq.check_run(self.run)[-1]
-        self.assertEqual((q.file, st), ("segments.md", "found"))
-
     def test_card_md_is_checked(self):
         card = self.run / "card.md"
         card.write_text(
@@ -178,42 +172,42 @@ class CheckQuotesTests(unittest.TestCase):
 
 
 INPUT = "Хотим свопы прямо в виджете.\nМы теряем ~35% пользователей\nна экране адреса. Всё «очень» дорого.\n"
-ANSWERS = "**Вопрос (01.10.2026 10:00, шаг 0):** кто платит?\n**Ответ (10:05):** «платит покупатель, 1% сверху»\n"
-BRIEF = """# Бриф: свопы в виджете
+ANSWERS = "**Вопрос (01.10.2026 10:00, шаг 1):** кто платит?\n**Ответ (10:05):** «платит покупатель, 1% сверху»\n"
+FORMULA = """# Формула запроса: свопы в виджете
 
-## Идея словами автора
+## Запрос словами автора
 Автор: «свопы прямо в виджете». Потери: «теряем ~35% пользователей на экране адреса».
 
-## Кто платит
+## Формула
 - Платит: «платит покупатель» — ответ автора.
 - Сейчас решают: «биржа берёт 3% за обмен».
 - Цена: «все "очень" дорого».
 
-## Вопросы, от ответа на которые меняется вывод
+## Вопросы, которые задали бы человеку
 1. Какая цель к дате? Например: «€50 тыс. в месяц к марту».
 """
 
 
-class BriefQuotesTests(unittest.TestCase):
+class FormulaQuotesTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.run = Path(self.tmp.name)
         (self.run / "input.md").write_text(INPUT, encoding="utf-8")
         (self.run / "author-answers.md").write_text(ANSWERS, encoding="utf-8")
-        self.brief = self.run / "brief.md"
-        self.brief.write_text(BRIEF, encoding="utf-8")
+        self.formula = self.run / "formula.md"
+        self.formula.write_text(FORMULA, encoding="utf-8")
 
     def tearDown(self):
         self.tmp.cleanup()
 
-    def brief_run(self):
+    def formula_run(self):
         out = io.StringIO()
         with redirect_stdout(out):
-            cq.main(["--run", str(self.run), "--brief"])
+            cq.main(["--run", str(self.run), "--formula"])
         return out.getvalue()
 
     def test_quotes_found_in_input_or_answers(self):
-        rows = [(q.quote, st) for q, st in cq.check_brief(self.run)]
+        rows = [(q.quote, st) for q, st in cq.check_formula(self.run)]
         self.assertEqual(rows, [
             ("свопы прямо в виджете", "found"),
             ("теряем ~35% пользователей на экране адреса", "found"),  # перенос строки во входе
@@ -223,67 +217,67 @@ class BriefQuotesTests(unittest.TestCase):
         ])
 
     def test_missing_quote_is_struck_and_counted_on_own_line(self):
-        out = self.brief_run()
-        text = self.brief.read_text(encoding="utf-8")
+        out = self.formula_run()
+        text = self.formula.read_text(encoding="utf-8")
         self.assertIn("- Сейчас решают: ~~«биржа берёт 3% за обмен»~~.", text)
         self.assertIn("Автор: «свопы прямо в виджете».", text)
-        self.assertEqual(out.splitlines()[0], "Цитаты брифа: 5. Нашлись: 4. Неточно: 0. Зачёркнуты: 1.")
-        self.assertIn("- нет во входе: brief.md:8 «биржа берёт 3% за обмен»", out)
+        self.assertEqual(out.splitlines()[0], "Цитаты формулы: 5. Нашлись: 4. Неточно: 0. Зачёркнуты: 1.")
+        self.assertIn("- нет во входе: formula.md:8 «биржа берёт 3% за обмен»", out)
 
     def test_example_answers_in_questions_are_not_checked(self):
-        self.brief_run()
-        self.assertIn("Например: «€50 тыс. в месяц к марту».", self.brief.read_text(encoding="utf-8"))
+        self.formula_run()
+        self.assertIn("Например: «€50 тыс. в месяц к марту».", self.formula.read_text(encoding="utf-8"))
 
     def test_rerun_counts_struck_once(self):
-        self.brief_run()
-        out = self.brief_run()
-        text = self.brief.read_text(encoding="utf-8")
+        self.formula_run()
+        out = self.formula_run()
+        text = self.formula.read_text(encoding="utf-8")
         self.assertNotIn("~~~~", text)
-        self.assertEqual(out.splitlines()[0], "Цитаты брифа: 5. Нашлись: 4. Неточно: 0. Зачёркнуты: 1.")
-        self.assertIn("- зачёркнута раньше: brief.md:8 «биржа берёт 3% за обмен»", out)
+        self.assertEqual(out.splitlines()[0], "Цитаты формулы: 5. Нашлись: 4. Неточно: 0. Зачёркнуты: 1.")
+        self.assertIn("- зачёркнута раньше: formula.md:8 «биржа берёт 3% за обмен»", out)
 
-    def test_brief_mode_leaves_check_md_and_evidence_alone(self):
+    def test_formula_mode_leaves_check_md_and_evidence_alone(self):
         (self.run / "evidence").mkdir()
         ev = self.run / "evidence" / "job.md"
         ev.write_text("- «выдумка» — [Форум](https://forum.example/t/1), без даты, src-001\n", encoding="utf-8")
-        self.brief_run()
+        self.formula_run()
         self.assertFalse((self.run / "check.md").exists())
         self.assertNotIn("~~", ev.read_text(encoding="utf-8"))
 
-    def test_default_mode_leaves_brief_alone(self):
+    def test_default_mode_leaves_formula_alone(self):
         cq.main(["--run", str(self.run)])
-        self.assertEqual(self.brief.read_text(encoding="utf-8"), BRIEF)
+        self.assertEqual(self.formula.read_text(encoding="utf-8"), FORMULA)
         self.assertIn("Цитат: 0. Нашлись: 0.", (self.run / "check.md").read_text(encoding="utf-8"))
 
     def test_changed_meaning_is_inexact_not_found(self):
         # перевёрнутое отрицание и сдвинутая запятая похожи на вход больше чем на 0,8 — это «неточно»
         (self.run / "input.md").write_text("Покупатель не платит комиссию. Чаевые — 54 тыс. долларов в месяц.\n",
                                            encoding="utf-8")
-        self.brief.write_text("## Кто платит\n- «покупатель платит комиссию»\n- «5,4 тыс. долларов в месяц»\n",
+        self.formula.write_text("## Формула\n- «покупатель платит комиссию»\n- «5,4 тыс. долларов в месяц»\n",
                               encoding="utf-8")
-        out = self.brief_run()
-        self.assertEqual(out.splitlines()[0], "Цитаты брифа: 2. Нашлись: 0. Неточно: 2. Зачёркнуты: 0.")
-        self.assertIn("- неточно: brief.md:2 «покупатель платит комиссию»", out)
-        self.assertIn("- неточно: brief.md:3 «5,4 тыс. долларов в месяц»", out)
+        out = self.formula_run()
+        self.assertEqual(out.splitlines()[0], "Цитаты формулы: 2. Нашлись: 0. Неточно: 2. Зачёркнуты: 0.")
+        self.assertIn("- неточно: formula.md:2 «покупатель платит комиссию»", out)
+        self.assertIn("- неточно: formula.md:3 «5,4 тыс. долларов в месяц»", out)
 
     def test_only_human_answers_count_as_author_words(self):
         # пример ответа из вопроса сессии — не слова автора
         (self.run / "author-answers.md").write_text(
-            "**Вопрос (01.10.2026 10:00, шаг 0):** Кто платит? Например: «покупатель, 1% сверху».\n"
+            "**Вопрос (01.10.2026 10:00, шаг 1):** Кто платит? Например: «покупатель, 1% сверху».\n"
             "**Ответ (10:05):** «не знаю, решает партнёр»\n", encoding="utf-8")
-        self.brief.write_text("## Кто платит\n- Платит: «покупатель, 1% сверху».\n"
+        self.formula.write_text("## Формула\n- Платит: «покупатель, 1% сверху».\n"
                               "- Решает о покупке: «решает партнёр».\n", encoding="utf-8")
-        rows = [(q.quote, st) for q, st in cq.check_brief(self.run)]
+        rows = [(q.quote, st) for q, st in cq.check_formula(self.run)]
         self.assertEqual(rows, [("покупатель, 1% сверху", "missing"), ("решает партнёр", "found")])
 
-    def test_brief_mode_works_without_yaml(self):
-        # шаг 0 идёт до установки пакетов: сверке брифа yaml не нужен
+    def test_formula_mode_works_without_yaml(self):
+        # формула идёт до установки пакетов: её сверке yaml не нужен
         code = ("import sys; sys.modules['yaml'] = None; sys.path.insert(0, sys.argv[1]); "
-                "import check_quotes; check_quotes.main(['--run', sys.argv[2], '--brief'])")
+                "import check_quotes; check_quotes.main(['--run', sys.argv[2], '--formula'])")
         tools = str(Path(__file__).resolve().parents[1])
         r = subprocess.run([sys.executable, "-c", code, tools, str(self.run)], capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("Цитаты брифа: 5.", r.stdout)
+        self.assertIn("Цитаты формулы: 5.", r.stdout)
 
 
 if __name__ == "__main__":

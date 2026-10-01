@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Сверка цитат прогона со снимками страниц.
 
-Находит в evidence/*.md, segments.md и card.md строки цитат вида
+Находит в evidence/*.md и card.md строки цитат вида
   «цитата» — [название](URL), дата, src-NNN
 и ищет каждую цитату в sources/src-NNN.txt. Цитату без снимка или без совпадения
 зачёркивает в файле, только в её строке: ~~«цитата»~~. Между цитатой и ссылкой стоит
@@ -9,12 +9,12 @@
 (например, «кавычки» внутри цитаты), считает ошибкой формата и зачёркивает целиком.
 Итог пишет в check.md, раздел «Сверка цитат».
 
-С --brief сверяет только brief.md: каждую «цитату» вне раздела вопросов (там «» — пример
-ответа) ищет в input.md и в ответах автора из author-answers.md, без вопросов сессии.
-Ненайденную зачёркивает, итог печатает отдельной строкой «Цитаты брифа: …»; check.md
-и файлы других шагов не трогает. Этому режиму пакет yaml не нужен.
+С --formula сверяет только formula.md: каждую «цитату» вне раздела вопросов (там «» —
+пример ответа) ищет в input.md и в ответах автора из author-answers.md, без вопросов
+сессии. Ненайденную зачёркивает, итог печатает отдельной строкой «Цитаты формулы: …»;
+check.md и файлы других шагов не трогает. Этому режиму пакет yaml не нужен.
 
-  check_quotes.py --run RUN [--brief]"""
+  check_quotes.py --run RUN [--formula]"""
 import argparse
 import re
 import sys
@@ -33,10 +33,10 @@ SECTION = "Сверка цитат"
 LABEL = {"missing": "нет в снимке", "no_snapshot": "нет снимка", "inexact": "неточно",
          "struck": "зачёркнута раньше", "format": "ошибка формата"}
 Quote = namedtuple("Quote", "file line quote url src struck")
-BRIEF_QUOTE_RE = re.compile(r"(?P<pre>~~)?«(?P<quote>[^»\n]+)»")
-BRIEF_SKIP = "## Вопросы"
+FORMULA_QUOTE_RE = re.compile(r"(?P<pre>~~)?«(?P<quote>[^»\n]+)»")
+FORMULA_SKIP = "## Вопросы"
 ANSWER_RE = re.compile(r"^\*\*Ответ[^\n]*?:\*\*(.*?)(?=^\*\*Вопрос|\Z)", re.S | re.M)
-BRIEF_LABEL = {"missing": "нет во входе", "inexact": "неточно", "struck": "зачёркнута раньше"}
+FORMULA_LABEL = {"missing": "нет во входе", "inexact": "неточно", "struck": "зачёркнута раньше"}
 
 
 def scan(text, file=""):
@@ -72,7 +72,7 @@ def status_of(run, q):
     txt = run / "sources" / f"{q.src}.txt"
     if not txt.exists():
         return "no_snapshot", False
-    import yaml  # здесь, а не наверху: сверке брифа на шаге 0 пакет не нужен
+    import yaml  # здесь, а не наверху: сверке формулы на шаге 1 пакет не нужен
 
     meta = run / "sources" / f"{q.src}.yaml"
     info = yaml.safe_load(meta.read_text(encoding="utf-8")) if meta.exists() else None
@@ -98,7 +98,7 @@ def strike_line(line):
 
 def check_run(run):
     files = sorted((run / "evidence").glob("*.md"))
-    files += [run / name for name in ("segments.md", "card.md") if (run / name).exists()]
+    files += [run / "card.md"] if (run / "card.md").exists() else []
     rows = []
     for f in files:
         text = f.read_text(encoding="utf-8")
@@ -130,20 +130,20 @@ def render(rows):
     return "\n".join(lines)
 
 
-def check_brief(run):
-    """[(Quote, found | inexact | missing | struck)] для цитат brief.md; ненайденные зачёркивает в файле."""
-    brief = run / "brief.md"
+def check_formula(run):
+    """[(Quote, found | inexact | missing | struck)] для цитат formula.md; ненайденные зачёркивает в файле."""
+    formula = run / "formula.md"
     texts = [(run / "input.md").read_text(encoding="utf-8")] if (run / "input.md").is_file() else []
     if (run / "author-answers.md").is_file():  # слова автора — только ответы, без вопросов сессии
         texts += ANSWER_RE.findall((run / "author-answers.md").read_text(encoding="utf-8"))
-    lines, rows, skip = brief.read_text(encoding="utf-8").splitlines(keepends=True), [], False
+    lines, rows, skip = formula.read_text(encoding="utf-8").splitlines(keepends=True), [], False
     for i, ln in enumerate(lines, 1):
         if ln.startswith("## "):
-            skip = ln.startswith(BRIEF_SKIP)
+            skip = ln.startswith(FORMULA_SKIP)
         if skip:
             continue
-        for m in BRIEF_QUOTE_RE.finditer(ln):
-            q = Quote("brief.md", i, m.group("quote"), None, None, bool(m.group("pre")))
+        for m in FORMULA_QUOTE_RE.finditer(ln):
+            q = Quote("formula.md", i, m.group("quote"), None, None, bool(m.group("pre")))
             found = set() if q.struck else {match_quote(q.quote, t)[0] for t in texts}
             st = ("struck" if q.struck else "found" if "yes" in found
                   else "inexact" if "partial" in found else "missing")
@@ -153,17 +153,17 @@ def check_brief(run):
         pat = r"(?<!~~)«" + re.escape(q.quote) + r"»(?!~~)"
         lines[q.line - 1] = re.sub(pat, lambda m: "~~" + m.group(0) + "~~", lines[q.line - 1], count=1)
     if missing:
-        brief.write_text("".join(lines), encoding="utf-8")
+        formula.write_text("".join(lines), encoding="utf-8")
     return rows
 
 
-def render_brief(rows):
+def render_formula(rows):
     n = Counter(st for _, st in rows)
-    lines = [f"Цитаты брифа: {len(rows)}. Нашлись: {n['found']}. Неточно: {n['inexact']}. "
+    lines = [f"Цитаты формулы: {len(rows)}. Нашлись: {n['found']}. Неточно: {n['inexact']}. "
              f"Зачёркнуты: {n['missing'] + n['struck']}."]
     for q, st in rows:
-        if st in BRIEF_LABEL:
-            lines.append(f"- {BRIEF_LABEL[st]}: {q.file}:{q.line} «{q.quote[:80]}»")
+        if st in FORMULA_LABEL:
+            lines.append(f"- {FORMULA_LABEL[st]}: {q.file}:{q.line} «{q.quote[:80]}»")
     return "\n".join(lines)
 
 
@@ -179,15 +179,15 @@ def upsert_section(md, title, body):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run", required=True, help="папка прогона")
-    ap.add_argument("--brief", action="store_true", help="только цитаты brief.md против входа и ответов автора")
+    ap.add_argument("--formula", action="store_true", help="только цитаты formula.md против входа и ответов автора")
     a = ap.parse_args(argv)
     run = Path(a.run).resolve()
     if not run.is_dir():
         sys.exit(f"нет папки прогона {run}")
-    if a.brief:
-        if not (run / "brief.md").is_file():
-            sys.exit(f"нет {run / 'brief.md'}")
-        print(render_brief(check_brief(run)))
+    if a.formula:
+        if not (run / "formula.md").is_file():
+            sys.exit(f"нет {run / 'formula.md'}")
+        print(render_formula(check_formula(run)))
         return
     body = render(check_run(run))
     chk = run / "check.md"

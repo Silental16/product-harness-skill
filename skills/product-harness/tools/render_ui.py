@@ -2,9 +2,11 @@
 """Страница прогона: данные прогона в шаблон ui/page.html.
 
 Читает RUN/status.json, который ведёт главная сессия, добавляет к нему тексты файлов
-шагов, строки notes.md, счёт из evidence/*.md и check.md и сам шаблон. Кладёт всё одним
-JSON в шаблон и пишет локальную страницу: её дают человеку, когда стенд не отвечает.
-Те же данные без шаблона push_run.py шлёт на стенд.
+шагов, строки notes.md, счёт из evidence/*.md и check.md и сам шаблон. Шаг с полем
+section получает в result текст этих разделов из своих файлов: так страница показывает
+итог шага без копирования текста руками. Кладёт всё одним JSON в шаблон и пишет
+локальную страницу: её дают человеку, когда стенд не отвечает. Те же данные без шаблона
+push_run.py шлёт на стенд.
 
   render_ui.py --run RUN [--out PATH]      по умолчанию PATH = RUN/ui.html"""
 import argparse
@@ -27,17 +29,22 @@ TAIL = "\n</body></html>"
 SLOT = re.compile(r"\{\{(RUN_TITLE|RUN_DATA)\}\}")
 NOTE_RE = re.compile(r"^(\d\d\.\d\d) (\d\d:\d\d) — ([^—\n]+?) — (.+)$")
 META_RE = re.compile(r"^(?:\d[\d\s]*|неизвестно)$")
-ROUND_RE = re.compile(r"^## Проверка карты, круг (\d+)\s*$", re.M)
-VIOL_RE = re.compile(r"^Нарушений: (\d+)(?:, из них спорно: (\d+))?.*$", re.M)
-# Шаги прогона по SKILL.md: id, название, файл. status.json без "steps" получает их со статусом next.
-STEPS = [("brief", "Бриф", "brief.md"), ("collect", "Сбор", None), ("check", "Сверка цитат", "check.md"),
-         ("map", "Карта сегментов", "segments.md"), ("review", "Проверка карты", "check.md"),
-         ("card", "Карточка решения", "card.md")]
+# Шаги прогона по SKILL.md: id, название, файлы, разделы итога. status.json без "steps" получает
+# их со статусом next; файлы сборщиков шага 2 сессия дописывает в status.json сама.
+STEPS = [("formula", "Формула запроса", ["formula.md", "input.md"], "Формула"),
+         ("market", "Кто уже это делает и рынок", ["check.md", "card.md"],
+          ["Кто уже это делает", "Боль автора: что показал сбор"]),
+         ("segments", "Сегменты", ["card.md"], "Сегменты"),
+         ("solutions", "Решения", ["card.md"], "Решения"),
+         ("money", "Деньги и отсев", ["card.md"], "Деньги и отсев"),
+         ("test", "Проверка", ["card.md"], "Проверка"),
+         ("card", "Карта возможностей", ["card.md"], ["Главное", "Карта возможностей", "Не знаем"])]
 
 
 def default_steps():
-    return [{"id": i, "n": n, "title": t, "status": "next", **({"file": f} if f else {})}
-            for n, (i, t, f) in enumerate(STEPS)]
+    return [{"id": i, "n": n, "title": t, "status": "next",
+             **({"file": fs[0]} if len(fs) == 1 else {"files": fs}), "section": sec}
+            for n, (i, t, fs, sec) in enumerate(STEPS, 1)]
 
 
 def step_files(step):
@@ -77,13 +84,24 @@ def counts(run):
     chk = run / "check.md"
     md = chk.read_text(encoding="utf-8") if chk.exists() else ""
     quotes = next((ln for ln in section(md, "Сверка цитат").splitlines() if ln.startswith("Цитат:")), None)
-    reviews = []
-    for m in ROUND_RE.finditer(md):
-        v = VIOL_RE.search(section(md, f"Проверка карты, круг {m.group(1)}"))
-        if v:
-            reviews.append({"round": int(m.group(1)), "line": v.group(0), "violations": int(v.group(1)),
-                            "disputed": int(v.group(2) or 0)})
-    return {"evidence": ev, "quotes": quotes, "reviews": reviews}
+    return {"evidence": ev, "quotes": quotes}
+
+
+def step_result(step, files):
+    """Итог шага из его разделов: каждый раздел — из первого файла шага, где он есть.
+    Несколько разделов идут под своими заголовками. Идущий шаг итога не показывает."""
+    names = step.get("section")
+    if not names or step.get("status") not in ("done", "waiting"):
+        return ""
+    names = [names] if isinstance(names, str) else names
+    found = []
+    for name in names:
+        text = next((t for t in (section(files.get(f, ""), name) for f in step_files(step)) if t), "")
+        if text:
+            found.append((name, text))
+    if len(names) == 1:
+        return found[0][1] if found else ""
+    return "\n\n".join(f"### {name}\n\n{text}" for name, text in found)
 
 
 def to_json(obj):
@@ -96,17 +114,29 @@ def fill(template, data):
     return SLOT.sub(lambda m: vals[m.group(1)], template)
 
 
+def idea_of(run, files):
+    """Слова автора для шапки: из formula.md, у прогонов версии 1 — из brief.md."""
+    for name, title in (("formula.md", "Запрос словами автора"), ("brief.md", "Идея словами автора")):
+        md = files.get(name) or ((run / name).read_text(encoding="utf-8") if (run / name).is_file() else "")
+        if section(md, title):
+            return section(md, title)
+    return ""
+
+
 def build_data(run):
     """Данные страницы прогона без шаблона; их же push_run.py шлёт на стенд."""
     status = json.loads((run / "status.json").read_text(encoding="utf-8"))
     status["steps"] = status.get("steps") or default_steps()
     names = [f for s in status.get("steps", []) for f in step_files(s)]
     files = {f: (run / f).read_text(encoding="utf-8") for f in dict.fromkeys(names) if (run / f).is_file()}
-    brief = files.get("brief.md") or ((run / "brief.md").read_text(encoding="utf-8")
-                                      if (run / "brief.md").is_file() else "")
+    for s in status["steps"]:
+        if not (isinstance(s.get("result"), str) and s["result"].strip()):
+            res = step_result(s, files)
+            if res:
+                s["result"] = res
     notes = run / "notes.md"
     return {**status,
-            "idea": status.get("idea") or section(brief, "Идея словами автора"),
+            "idea": status.get("idea") or idea_of(run, files),
             "files": files,
             "timeline": timeline(notes.read_text(encoding="utf-8")) if notes.exists() else [],
             "counts": counts(run),

@@ -786,9 +786,13 @@ button.tab { cursor: pointer; }
     var bar = steps.map(function (s) {
       return '<span data-status="' + esc(s.status) + '" title="' + esc(s.n + " " + s.title) + '"></span>';
     }).join("");
-    // Кто ведёт прогон — из шапки notes.md; кладёт push_run.py.
-    var who = data.author ? "<p>Ведёт: " + esc(data.author) + (data.engine ? " · " + esc(data.engine) : "") + "</p>" : "";
-    $("run-state").innerHTML = '<div class="bar" aria-hidden="true">' + bar + "</div><p>" + line + "</p>" + who;
+    // Кто ведёт прогон — из шапки notes.md, версия скилла — «ветка · коммит»; кладёт push_run.py.
+    var who = data.author ? "Ведёт: " + esc(data.author) + (data.engine ? " · " + esc(data.engine) : "") : "";
+    var sha = data.skill_commit;
+    var ver = sha ? '<span class="mono"' + (/\+$/.test(sha) ? ' title="есть незакоммиченные правки скилла"' : "") + ">" +
+      (data.skill_branch ? esc(data.skill_branch) + " · " : "") + esc(sha) + "</span>" : "";
+    if (ver) who = who ? who + " · скилл " + ver : "Скилл " + ver;
+    $("run-state").innerHTML = '<div class="bar" aria-hidden="true">' + bar + "</div><p>" + line + "</p>" + (who ? "<p>" + who + "</p>" : "");
   }
 
   // Шаги

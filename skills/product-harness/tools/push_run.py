@@ -114,6 +114,7 @@ def payload(run):
     meta = {"run": run.name, "title": data.get("title"), "author": author, "engine": engine, "model": model,
             "step": current(data["steps"]), "state": state(data["steps"]), "verdict": verdict(run)}
     meta["skill_branch"], meta["skill_commit"] = skill_version()
+    data["skill_branch"], data["skill_commit"] = meta["skill_branch"], meta["skill_commit"]  # шапка: «скилл …»
     return {"meta": meta, "data": data}
 
 
