@@ -1,0 +1,1043 @@
+<title>{{RUN_TITLE}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500&family=JetBrains+Mono:wght@400&family=Spectral:wght@300;400&display=swap">
+<style>
+/* Шаблон страницы прогона продуктового харнесса. Данные кладёт tools/render_ui.py.
+   Layout: протокол прогона. Шапка с идеей, вопрос Андрею сверху, шаги по порядку на одной линии;
+   журнал из notes.md справа от 1040px и под шагами на телефоне. */
+:root {
+  --ground: #f3f4f6;
+  --paper: #ffffff;
+  --ink: #17191e;
+  --ink-2: #505765;
+  --ink-3: #767d8a;
+  --rule: #dcdfe5;
+  --accent: #2c45c4;
+  --accent-soft: #e7ebfa;
+  --on-accent: #ffffff;
+  --font-display: "Spectral", Georgia, "Times New Roman", serif;
+  --font-body: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --radius-mark: 4px;
+  --radius-control: 6px;
+  --radius-panel: 10px;
+  --radius-callout: 14px;
+  --gutter: 16px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #0f1115; --paper: #161920; --ink: #e4e6eb; --ink-2: #a3a9b5; --ink-3: #7a8190;
+    --rule: #272b34; --accent: #97a8ff; --accent-soft: #1a2141; --on-accent: #0f1115;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #0f1115; --paper: #161920; --ink: #e4e6eb; --ink-2: #a3a9b5; --ink-3: #7a8190;
+  --rule: #272b34; --accent: #97a8ff; --accent-soft: #1a2141; --on-accent: #0f1115;
+  color-scheme: dark;
+}
+@media (min-width: 720px) { :root { --gutter: 32px; } }
+
+body {
+  background: var(--ground); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+button, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-mark); }
+[hidden] { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+svg.lucide { flex: none; }
+
+.page { max-width: 1180px; margin: 0 auto; padding-inline: var(--gutter); padding-block: 28px 72px; }
+
+/* Шапка */
+.head { display: grid; gap: 14px; padding-block-end: 26px; margin-block-end: 30px; border-bottom: 1px solid var(--rule); }
+.eyebrow { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin: 0; font-size: 12px; color: var(--ink-2); }
+.eyebrow b { font-weight: 500; letter-spacing: .08em; text-transform: uppercase; }
+.eyebrow .mono { color: var(--ink-3); overflow-wrap: anywhere; }
+h1 {
+  margin: 0; font-family: var(--font-display); font-weight: 300;
+  font-size: clamp(30px, 4.4vw, 46px); line-height: 1.08; letter-spacing: -0.012em; text-wrap: balance;
+}
+.idea { margin: 0; max-width: 62ch; font-size: 16.5px; line-height: 1.55; color: var(--ink-2); text-wrap: pretty; }
+.verdict { display: grid; gap: 5px; max-width: 64ch; margin-top: 4px; }
+.verdict-text { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: clamp(20px, 2.4vw, 24px); line-height: 1.32; color: var(--ink-2); text-wrap: pretty; }
+.state { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin-top: 4px; }
+.bar { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(10px, 34px); gap: 4px; }
+.bar span { height: 4px; border-radius: 2px; background: var(--rule); }
+.bar [data-status="done"] { background: var(--ink-3); }
+.bar [data-status="running"], .bar [data-status="waiting"] { background: var(--accent); }
+.bar [data-status="skipped"] { background: repeating-linear-gradient(90deg, var(--ink-3) 0 3px, transparent 3px 6px); opacity: .6; }
+.state p { margin: 0; font-size: 13px; color: var(--ink-2); }
+.state p strong { font-weight: 500; color: var(--ink); }
+
+.grid { display: grid; gap: 44px; }
+main { min-width: 0; }
+@media (min-width: 1040px) {
+  .grid { grid-template-columns: minmax(0, 1fr) 316px; gap: 64px; align-items: start; }
+  .log { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px);
+         max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px); overflow-y: auto; scrollbar-width: thin; }
+}
+
+/* Вопрос */
+.ask { margin-block-end: 34px; }
+.ask-open { display: grid; gap: 14px; padding: 20px; border-radius: var(--radius-callout); background: var(--accent-soft); }
+@media (min-width: 720px) { .ask-open { padding: 24px 26px; } }
+.ask-eyebrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; margin: 0; font-size: 13px; }
+.ask-need { display: inline-flex; align-items: center; gap: 8px; color: var(--accent); font-weight: 500; }
+.ask-need svg { width: 16px; height: 16px; }
+.ask-meta { color: var(--ink-2); }
+.ask h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 25px; line-height: 1.25; text-wrap: balance; }
+.ask-list { display: grid; gap: 8px; }
+.ask-list .r-label { margin-top: 6px; }
+.ask-items { display: grid; gap: 8px; margin: 0; padding-left: 24px; font-size: 15.5px; line-height: 1.5; }
+.ask-items li::marker { color: var(--ink-3); }
+.ask form { display: grid; gap: 12px; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt {
+  padding: 7px 15px; border-radius: var(--radius-control); border: 1px solid var(--accent);
+  background: transparent; color: var(--accent); font-size: 14px; cursor: pointer;
+}
+.opt:hover { background: var(--paper); }
+.opt[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.ask textarea {
+  display: block; width: 100%; box-sizing: border-box; min-height: 78px; resize: vertical;
+  padding: 10px 12px; border-radius: var(--radius-control); border: 1px solid var(--rule);
+  background: var(--paper); font-size: 15px; line-height: 1.5;
+}
+.ask textarea::placeholder { color: var(--ink-3); }
+.ask textarea:focus-visible { outline-offset: 0; border-color: transparent; }
+.ask-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.ask-note { margin: 0; font-size: 13px; color: var(--ink-2); min-height: 1.5em; }
+.send {
+  display: inline-flex; align-items: center; gap: 8px; margin-left: auto;
+  padding: 9px 17px; border: 0; border-radius: var(--radius-control);
+  background: var(--accent); color: var(--on-accent); font-size: 14px; font-weight: 500; cursor: pointer;
+}
+.send svg { width: 16px; height: 16px; }
+.send:disabled, .opt:disabled { opacity: .45; cursor: default; }
+.ask textarea:disabled { opacity: .6; }
+.ask-calm { display: flex; gap: 10px; align-items: flex-start; margin: 0; font-size: 14px; color: var(--ink-2); }
+.ask-calm svg { width: 17px; height: 17px; margin-top: 2px; color: var(--ink-3); }
+.ask-saved { padding: 14px 18px; border-radius: var(--radius-callout); background: var(--accent-soft); color: var(--ink); }
+.ask-saved svg { color: var(--accent); }
+
+/* Шаги */
+.steps { list-style: none; margin: 0; padding: 0; }
+.step { display: grid; grid-template-columns: 22px 24px minmax(0, 1fr); column-gap: 12px; }
+@media (min-width: 720px) { .step { grid-template-columns: 26px 24px minmax(0, 1fr); column-gap: 16px; } }
+.num { padding-top: 5px; text-align: right; font-size: 12px; color: var(--ink-3); }
+.rail { position: relative; display: flex; justify-content: center; }
+.rail::after { content: ""; position: absolute; top: 30px; bottom: 4px; left: 50%; border-left: 1px solid var(--rule); }
+.step:last-child .rail::after { display: none; }
+.step[data-status="running"] .rail::after, .step[data-status="waiting"] .rail::after,
+.step[data-status="next"] .rail::after, .step[data-status="skipped"] .rail::after { border-left-style: dashed; }
+.mark { width: 24px; height: 26px; display: grid; place-items: center; color: var(--ink-2); }
+.mark svg { width: 19px; height: 19px; }
+.step[data-status="running"] .mark, .step[data-status="waiting"] .mark { color: var(--accent); }
+.step[data-status="next"] .mark, .step[data-status="skipped"] .mark { color: var(--ink-3); }
+.step[data-status="running"] .mark svg { animation: spin 2.4s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .step[data-status="running"] .mark svg { animation: none; } }
+
+.step-main { min-width: 0; padding-block-end: 34px; }
+.step:last-child .step-main { padding-block-end: 0; }
+.step-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; min-width: 0; }
+.step-title { font-family: var(--font-display); font-weight: 400; font-size: 21px; line-height: 1.25; }
+.step[data-status="next"] .step-title { color: var(--ink-2); }
+.step[data-status="skipped"] .step-title { color: var(--ink-3); }
+.chip {
+  align-self: center; padding: 1px 8px; border-radius: var(--radius-mark);
+  font-size: 12px; line-height: 1.6; color: var(--accent); background: var(--accent-soft);
+}
+.step[data-status="waiting"] .chip { color: var(--on-accent); background: var(--accent); }
+.when { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+@media (min-width: 720px) { .when { margin-left: auto; } }
+.summary { margin: 6px 0 0; max-width: 68ch; color: var(--ink-2); text-wrap: pretty; }
+.summary.as-result { color: var(--ink); }
+
+/* Результат шага: виден без клика. Короткие строки, цифры, мелкие подписи; всё остальное — под «Подробнее». */
+.result { display: grid; gap: 20px; margin-top: 12px; max-width: 74ch; min-width: 0; }
+.r-group { display: grid; gap: 8px; min-width: 0; }
+.r-label { margin: 0; font-size: 11.5px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.r-label .mono { margin-left: 6px; letter-spacing: 0; font-weight: 400; }
+.r-lead { margin: 0; font-size: 15px; line-height: 1.55; text-wrap: pretty; }
+.r-none { margin: 0; font-size: 14.5px; color: var(--ink-2); text-wrap: pretty; }
+.r-rows { display: grid; gap: 8px; margin: 0; }
+.r-row { display: grid; gap: 1px 16px; font-size: 14.5px; line-height: 1.5; }
+@media (min-width: 720px) { .r-row { grid-template-columns: 10.5em minmax(0, 1fr); } }
+.r-row dt { font-size: 12.5px; color: var(--ink-3); padding-top: 2px; }
+.r-row dd { margin: 0; min-width: 0; text-wrap: pretty; }
+.r-row dd p { margin: 0; }
+.r-row dd p + p { margin-top: 3px; }
+.r-num { font-weight: 500; font-variant-numeric: tabular-nums; }
+.r-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.r-list li { position: relative; padding-left: 15px; font-size: 14px; line-height: 1.5; color: var(--ink-2); text-wrap: pretty; }
+.r-list li::before { content: ""; position: absolute; left: 0; top: .72em; width: 7px; border-top: 1px solid var(--ink-3); }
+.r-list b, .r-key { font-weight: 500; color: var(--ink); }
+.r-list.jobs li { font-size: 15.5px; color: var(--ink); }
+.tag {
+  display: inline-block; padding: 0 6px; border: 1px solid var(--rule); border-radius: var(--radius-mark);
+  font-size: 11.5px; line-height: 1.55; color: var(--ink-2); white-space: nowrap; vertical-align: 1px;
+}
+.figs { display: flex; flex-wrap: wrap; gap: 12px 36px; }
+.fig { display: grid; margin: 0; }
+.fig b { font-family: var(--font-display); font-weight: 300; font-size: 34px; line-height: 1.05; font-variant-numeric: lining-nums tabular-nums; }
+.fig span { font-size: 12.5px; color: var(--ink-2); }
+.fig.zero b { color: var(--ink-3); }
+.sc-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.sc-file { margin: 0; font-size: 12px; color: var(--ink-3); overflow-wrap: anywhere; }
+.sc-nums { margin: 1px 0 0; font-size: 14.5px; line-height: 1.5; }
+.sc-nums .site { color: var(--ink-2); overflow-wrap: anywhere; }
+.sc-note { margin: 2px 0 0; font-size: 13px; color: var(--ink-2); }
+.segs { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.seg-name { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 19px; line-height: 1.3; text-wrap: balance; }
+.seg-id { margin-right: 8px; font-size: 12px; color: var(--ink-3); vertical-align: 2px; }
+.seg-why { margin: 2px 0 0; font-size: 14px; line-height: 1.5; color: var(--ink-2); text-wrap: pretty; }
+.seg-k { color: var(--ink-3); }
+.segs.minor { gap: 9px; }
+.segs.minor .seg-name { font-family: var(--font-body); font-size: 15px; font-weight: 500; line-height: 1.45; text-wrap: pretty; }
+.r-round { margin: 0; font-size: 14.5px; font-weight: 500; }
+.answer { display: grid; gap: 8px; }
+.answer p { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: clamp(21px, 2.5vw, 25px); line-height: 1.3; text-wrap: pretty; }
+.answer p + p { font-size: 18px; line-height: 1.42; color: var(--ink-2); }
+.answer strong, .verdict-text strong { font-weight: 400; color: var(--ink); }
+.result .md { padding: 0; font-size: 15px; }
+
+.more-btn {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; padding: 4px 0;
+  border: 0; background: none; font-size: 13px; color: var(--ink-2); cursor: pointer;
+}
+.more-btn:hover { color: var(--ink); }
+.more-btn svg { width: 15px; height: 15px; transition: transform .16s ease; }
+.more-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
+.more-btn .mono { font-size: 12px; color: var(--ink-3); overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .more-btn svg { transition: none; } }
+
+.replies { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.reply { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 10px; }
+.reply svg { width: 16px; height: 16px; margin-top: 3px; color: var(--ink-3); }
+.reply-q { margin: 0; font-size: 12.5px; color: var(--ink-3); }
+.reply-a { margin: 1px 0 0; font-size: 14.5px; }
+.reply-a::before { content: "«"; } .reply-a::after { content: "»"; }
+
+.more { display: grid; gap: 16px; margin-top: 10px; }
+.more .summary { margin: 0; }
+.facts { display: grid; gap: 8px; margin: 0; }
+.fact { display: grid; gap: 1px 16px; font-size: 13.5px; }
+@media (min-width: 720px) { .fact { grid-template-columns: 11.5em minmax(0, 1fr); } }
+.fact dt { font-size: 12px; color: var(--ink-3); padding-top: 2px; overflow-wrap: anywhere; }
+.fact dd { margin: 0; color: var(--ink-2); max-width: 72ch; }
+
+.doc { position: relative; z-index: 1; min-width: 0; background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius-panel); }
+@media (max-width: 719.98px) { .doc { margin-left: -70px; } }
+.doc-bar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 0 18px; padding: 4px 16px 0; border-bottom: 1px solid var(--rule); }
+.tabs { display: flex; flex-wrap: wrap; gap: 0 16px; min-width: 0; }
+.tab {
+  margin: 0 0 -1px; padding: 9px 0 8px; border: 0; border-bottom: 2px solid transparent; background: none;
+  font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); overflow-wrap: anywhere; text-align: left;
+}
+button.tab { cursor: pointer; }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.gh { display: inline-flex; align-items: center; gap: 6px; padding: 9px 0; font-size: 12.5px; color: var(--ink-2); text-decoration: none; white-space: nowrap; }
+.gh:hover { color: var(--accent); }
+.gh svg { width: 14px; height: 14px; }
+.fold { justify-self: start; display: inline-flex; align-items: center; gap: 6px; padding: 4px 0; border: 0; background: none; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+.fold svg { width: 15px; height: 15px; }
+.fold:hover { color: var(--ink); }
+
+/* Текст файлов прогона */
+.md { padding: 20px 18px 24px; font-size: 14.5px; line-height: 1.62; overflow-wrap: anywhere; }
+@media (min-width: 720px) { .md { padding: 26px 30px 30px; } }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md h1 { margin: 0 0 16px; font-family: var(--font-display); font-weight: 400; font-size: 25px; line-height: 1.22; text-wrap: balance; }
+.md h2 { margin: 30px 0 10px; font-family: var(--font-display); font-weight: 400; font-size: 20px; line-height: 1.3; text-wrap: balance; }
+.md h3, .md h4 { margin: 22px 0 8px; font-size: 15px; font-weight: 500; line-height: 1.4; }
+.md p { margin: 0 0 12px; max-width: 74ch; }
+.md ul, .md ol { margin: 0 0 14px; padding-left: 20px; max-width: 74ch; }
+.md ul { list-style-type: disc; } .md ul ul { list-style-type: circle; } .md ol { list-style-type: decimal; }
+.md li { margin: 4px 0; }
+.md li::marker { color: var(--ink-3); }
+.md strong { font-weight: 500; }
+.md a { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px;
+        text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.md a:hover { text-decoration-color: currentColor; }
+.md del { color: var(--ink-3); }
+.md code { font-family: var(--font-mono); font-size: .86em; padding: 1px 4px; border-radius: var(--radius-mark); background: var(--ground); }
+.md pre { margin: 0 0 14px; padding: 12px 14px; overflow-x: auto; border-radius: var(--radius-control); background: var(--ground); font-size: 13px; line-height: 1.5; }
+.md pre code { padding: 0; background: none; }
+.md blockquote { margin: 0 0 14px; padding-left: 14px; border-left: 2px solid var(--rule); color: var(--ink-2); }
+.md hr { margin: 24px 0; border: 0; border-top: 1px solid var(--rule); }
+.md .table-wrap { margin: 4px 0 16px; overflow-x: auto; }
+.md table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.45; font-variant-numeric: tabular-nums; }
+.md th, .md td { min-width: 11ch; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; overflow-wrap: normal; }
+.md th { font-weight: 500; color: var(--ink-2); border-bottom-color: var(--ink-3); }
+.md th:last-child, .md td:last-child { padding-right: 0; }
+.md .src { font-family: var(--font-mono); font-size: .8em; color: var(--ink-3); white-space: nowrap; }
+.md-raw { white-space: pre-wrap; font-family: var(--font-mono); font-size: 12.5px; margin: 0; }
+
+/* Журнал */
+.log h2 { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 0 0 16px;
+          font-size: 12px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+.log h2 span { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
+.log ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; }
+.day { font-size: 12px; color: var(--ink-3); padding-block: 2px; border-bottom: 1px solid var(--rule); }
+.ev { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 0 10px; font-size: 13px; line-height: 1.45; }
+.ev time { font-size: 12px; color: var(--ink-2); padding-top: 1px; }
+.ev-label { margin: 0; font-size: 12px; color: var(--ink-3); }
+.ev-text { margin: 1px 0 0; overflow-wrap: anywhere; }
+.ev-meta { margin: 3px 0 0; font-size: 11.5px; color: var(--ink-3); overflow-wrap: anywhere; }
+.empty { margin: 0; font-size: 13px; color: var(--ink-3); }
+.broken { padding: 20px; border-radius: var(--radius-panel); background: var(--paper); border: 1px solid var(--rule); }
+</style>
+
+<div class="page">
+  <header class="head">
+    <p class="eyebrow"><b>Прогон харнесса</b><span class="mono" id="run-id"></span></p>
+    <h1 id="run-title"></h1>
+    <p class="idea" id="run-idea" hidden></p>
+    <div class="verdict" id="run-verdict" hidden></div>
+    <div class="state" id="run-state"></div>
+  </header>
+  <div class="grid">
+    <main>
+      <section class="ask" id="ask" aria-live="polite"></section>
+      <ol class="steps" id="steps"></ol>
+    </main>
+    <aside class="log" aria-labelledby="log-title">
+      <h2 id="log-title">Журнал <span>новые сверху</span></h2>
+      <ol id="log"></ol>
+    </aside>
+  </div>
+</div>
+
+<script type="application/json" id="run-data">{{RUN_DATA}}</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/18.0.14/lib/marked.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@1.49.0/dist/umd/lucide.min.js"></script>
+<script>
+(function () {
+  "use strict";
+  // Каркас самопубликации — та же строка, что HEAD и TAIL в tools/render_ui.py.
+  var HEAD = '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>' + "\n";
+  var TAIL = "\n</body></html>";
+  var SLOT = /\{\{(RUN_TITLE|RUN_DATA)\}\}/g;
+  var READ_ONLY = ["not_granted", "not_writer", "not_declared", "consent_required", "capability_disabled", "capability_removed"];
+  var MARK = {
+    done: { icon: "circle-check", word: "готово" },
+    running: { icon: "loader-circle", word: "идёт", chip: "идёт" },
+    waiting: { icon: "hand", word: "ждёт ответа", chip: "ждёт ответа" },
+    next: { icon: "circle-dashed", word: "впереди" },
+    skipped: { icon: "circle-minus", word: "пропущен" }
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#x27;" }[c];
+    });
+  };
+  var toJson = function (o) { return JSON.stringify(o).replace(/</g, "\\u003c"); };
+  var icon = function (name) { return '<i data-lucide="' + name + '" aria-hidden="true"></i>'; };
+  var base = function (p) { return String(p).split("/").pop(); };
+  function store(kind) {
+    try { return kind === "local" ? window.localStorage : window.sessionStorage; } catch (e) { return null; }
+  }
+  function getItem(kind, key) { try { var s = store(kind); return s ? s.getItem(key) : null; } catch (e) { return null; } }
+  function setItem(kind, key, val) { try { var s = store(kind); if (s) s.setItem(key, val); } catch (e) { /* без памяти */ } }
+  function drawIcons(root) {
+    if (window.lucide && window.lucide.createIcons) {
+      window.lucide.createIcons({ root: root || document, attrs: { "stroke-width": 1.6 } });
+    }
+  }
+
+  var data = null;
+  try { data = JSON.parse($("run-data").textContent); } catch (e) { data = null; }
+  if (!data || !Array.isArray(data.steps)) {
+    $("run-title").textContent = "Нет данных прогона";
+    $("steps").outerHTML = '<p class="broken">Эту страницу собирает <span class="mono">tools/render_ui.py --run RUN</span> из status.json прогона.</p>';
+    return;
+  }
+  var steps = data.steps;
+  var files = data.files || {};
+  var counts = data.counts || {};
+  // Стенд — сайт прогонов: формы ответа и ссылок на GitHub там нет, отвечают в чате.
+  var stand = data.stand === true;
+  var links = stand ? {} : data.links || {};
+  var answers = Array.isArray(data.answers) ? data.answers : [];
+  var runKey = "run-ui:" + (data.run || "");
+
+  // Пересборка страницы из шаблона и новых данных — без чтения DOM.
+  function fill(template, next) {
+    var vals = { RUN_TITLE: esc(next.title || next.run || "Прогон"), RUN_DATA: toJson(next) };
+    return template.replace(SLOT, function (_, k) { return vals[k]; });
+  }
+
+  // Markdown файлов прогона: разметку из текста не исполняем, ссылки только http(s).
+  if (window.marked && window.marked.use) {
+    window.marked.use({ gfm: true, breaks: true, renderer: {
+      html: function (t) { return esc(typeof t === "string" ? t : (t.text || t.raw || "")); }
+    } });
+  }
+  function renderMarkdown(el, text) {
+    if (!(window.marked && window.marked.parse)) {
+      el.innerHTML = '<pre class="md-raw">' + esc(text) + "</pre>";
+      return;
+    }
+    el.innerHTML = window.marked.parse(text);
+    el.querySelectorAll("a").forEach(function (a) {
+      var href = a.getAttribute("href") || "";
+      if (/^https?:\/\//i.test(href)) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
+      else a.removeAttribute("href");
+    });
+    el.querySelectorAll("table").forEach(function (t) {
+      var wrap = document.createElement("div");
+      wrap.className = "table-wrap";
+      wrap.tabIndex = 0;
+      wrap.setAttribute("role", "region");
+      wrap.setAttribute("aria-label", "Таблица");
+      t.replaceWith(wrap);
+      wrap.appendChild(t);
+    });
+    var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    var hits = [];
+    while (walker.nextNode()) {
+      var n = walker.currentNode;
+      if (/\bsrc-\d{3,}\b/.test(n.nodeValue) && !n.parentNode.closest("a, code, pre")) hits.push(n);
+    }
+    hits.forEach(function (n) {
+      var span = document.createElement("span");
+      span.innerHTML = esc(n.nodeValue).replace(/\bsrc-\d{3,}\b/g, '<span class="src">$&</span>');
+      n.replaceWith.apply(n, Array.prototype.slice.call(span.childNodes));
+    });
+  }
+
+  function stepFiles(s) { return s.files || (s.file ? [s.file] : []); }
+  function stepWhen(s) {
+    if (s.started && s.finished) return s.started + "–" + s.finished;
+    if (s.started) return "с " + s.started;
+    return s.finished || "";
+  }
+  function stepFacts(s) {
+    var out = [];
+    stepFiles(s).forEach(function (f) {
+      var line = (counts.evidence || {})[f];
+      if (line) out.push({ k: base(f), mono: true, v: line.replace(/^Счёт:\s*/, "") });
+    });
+    if (s.id === "check" && counts.quotes) out.push({ k: "Сверка цитат", v: counts.quotes });
+    if (s.id === "review") (counts.reviews || []).forEach(function (r) { out.push({ k: "Круг " + r.round, v: r.line }); });
+    return out;
+  }
+
+  // Результат шага из markdown файлов прогона. Каждый разбор может вернуть "" — тогда видна сводка шага.
+  var LIST = /^(?:[-*]|\d+[.)])\s+/;
+  function lines(md) { return String(md || "").replace(/\r/g, "").split("\n"); }
+  // Разделы заданного уровня: {title, lines} до следующего заголовка того же или старшего уровня.
+  function blocks(md, level) {
+    var out = [], cur = null, any = new RegExp("^#{1," + level + "}\\s"), own = new RegExp("^#{" + level + "}\\s+(.*)$");
+    lines(md).forEach(function (ln) {
+      if (any.test(ln)) {
+        var m = own.exec(ln);
+        cur = m ? { title: m[1].trim(), lines: [] } : null;
+        if (cur) out.push(cur);
+      } else if (cur) cur.lines.push(ln);
+    });
+    return out;
+  }
+  function section(md, name, level) {
+    var bs = blocks(md, level || 2);
+    return bs.filter(function (b) { return b.title === name; })[0] ||
+           bs.filter(function (b) { return b.title.indexOf(name) === 0; })[0] || null;
+  }
+  function items(ls) {
+    return ls.filter(function (l) { return LIST.test(l); }).map(function (l) { return l.replace(LIST, ""); });
+  }
+  function isQuote(t) { return /^\s*«/.test(t); }
+  function clean(t) {
+    return String(t || "")
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/`([^`]*)`/g, "$1")
+      .replace(/[,;]?\s*\bsrc-\d{3,}\b/g, "")
+      .replace(/\s+/g, " ").trim();
+  }
+  function sentence(t) {
+    var m = /[.!?…](?=\s+(?:[«"(]?[A-ZА-ЯЁ]|[\w.-]+\.md\b))/.exec(t);
+    return m ? t.slice(0, m.index + 1) : t;
+  }
+  // Длинную строку режем по концу первой фразы, а если и она длинная — по слову, с «…».
+  function cut(t, max) {
+    max = max || 220;
+    if (t.length <= max) return t;
+    var one = sentence(t);
+    if (one.length <= max) return one;
+    var head = t.slice(0, max), sp = head.lastIndexOf(" ");
+    return head.slice(0, sp > max * 0.6 ? sp : max).replace(/[\s,;:—–-]+$/, "") + "…";
+  }
+  function first(t, max) { return cut(sentence(t), max); }
+  function cap(t) { return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; }
+  function trimTail(t) { return t.replace(/[\s.,;:—–-]+$/, ""); }
+  // Первое вхождение sep вне «кавычек».
+  function splitAt(t, sep) {
+    var depth = 0;
+    for (var i = 0; i < t.length; i++) {
+      var c = t.charAt(i);
+      if (c === "«") depth++;
+      else if (c === "»") depth = Math.max(0, depth - 1);
+      else if (!depth && t.substr(i, sep.length) === sep) return [t.slice(0, i), t.slice(i + sep.length)];
+    }
+    return null;
+  }
+  // «Название: что» или «Название — что»: берём тот разделитель, что раньше, и отдаём его третьим.
+  function nameSplit(t) {
+    var a = splitAt(t, ": "), b = splitAt(t, " — ");
+    var hit = a && (!b || a[0].length < b[0].length) ? a.concat([":"]) : b ? b.concat([" —"]) : null;
+    return hit && hit[0].length <= 90 ? hit : null;
+  }
+  function plural(n, one, few, many) {
+    var a = Math.abs(n) % 100, b = a % 10;
+    if (a > 10 && a < 20) return many;
+    if (b > 1 && b < 5) return few;
+    return b === 1 ? one : many;
+  }
+  function fileOf(s, name) {
+    var fs = stepFiles(s);
+    var f = fs.filter(function (x) { return base(x) === name; })[0] || fs[0] || name;
+    return typeof files[f] === "string" ? files[f] : "";
+  }
+  function label(t, n) { return '<p class="r-label">' + esc(t) + (n ? '<span class="mono">' + esc(n) + "</span>" : "") + "</p>"; }
+  function rows(list) {
+    list = list.filter(function (r) { return r && (r.v || r.html); });
+    if (!list.length) return "";
+    return '<dl class="r-rows">' + list.map(function (r) {
+      return '<div class="r-row"><dt>' + esc(r.k) + "</dt><dd>" + (r.html || esc(cap(r.v))) + "</dd></div>";
+    }).join("") + "</dl>";
+  }
+  function verdictHtml(t) {
+    var kv = splitAt(t, " — ");
+    return kv && kv[0].length < 70 ? "<strong>" + esc(kv[0]) + "</strong> — " + esc(kv[1]) : esc(t);
+  }
+
+  function resBrief(s) {
+    var md = fileOf(s, "brief.md");
+    if (!md) return "";
+    var out = "";
+    var jobSec = section(md, "Работы клиента");
+    var jobs = jobSec ? jobSec.lines.map(function (l) { return clean(l.replace(LIST, "")); })
+      .filter(function (t) { return /^I want to\b/i.test(t); }) : [];
+    if (jobs.length) {
+      out += '<div class="r-group">' + label(jobs.length > 1 ? "Работы клиента" : "Работа клиента", jobs.length > 1 ? jobs.length : 0) +
+        '<ul class="r-list jobs">' + jobs.map(function (t) {
+          var lvl = /Уровень:\s*([A-Za-zА-ЯЁа-яё]+)/.exec(t);
+          return "<li>" + esc(cut(sentence(t))) + (lvl ? ' <span class="tag">' + esc(lvl[1]) + "</span>" : "") + "</li>";
+        }).join("") + "</ul></div>";
+    }
+    var payer = "", model = "", pay = section(md, "Кто платит");
+    if (pay) items(pay.lines).forEach(function (t) {
+      var kv = splitAt(t, ": ");
+      if (!kv) return;
+      var k = kv[0].trim();
+      if (!payer && /^Платит$/i.test(k)) payer = kv[1];
+      if (!model && /^Модель дохода/i.test(k)) model = kv[1];
+    });
+    var goalSec = section(md, "Цель автора");
+    var goal = goalSec ? goalSec.lines.map(clean).filter(Boolean)[0] || "" : "";
+    var qSec = blocks(md, 2).filter(function (b) { return /^Вопросы/.test(b.title); })[0];
+    var qRow = null;
+    if (qSec) {
+      var qn = items(qSec.lines).length;
+      var qNote = qSec.lines.map(clean).filter(function (l) { return /^Ответ/.test(l); })[0];
+      qRow = { k: "Открытые вопросы", html: '<span class="r-num">' + qn + "</span>" + (qNote ? " · " + esc(cut(qNote)) : "") };
+    }
+    out += rows([
+      { k: "Платит", v: cut(clean(payer)) },
+      { k: "Модель дохода", v: cut(clean(model)) },
+      { k: "Цель", v: cut(goal) },
+      qRow
+    ]);
+    return out;
+  }
+
+  function scoreRow(f, line) {
+    var body = line.replace(/^Счёт:\s*/, "");
+    var main = sentence(body), note = body.slice(main.length).trim(), p = {};
+    main.replace(/\.$/, "").split(/;\s*/).forEach(function (part) {
+      var kv = part.split(" — ");
+      if (kv.length > 1) p[kv[0].trim()] = kv.slice(1).join(" — ").trim();
+    });
+    var jobs = parseInt(p["эпизодов о работе"], 10), sellers = parseInt(p["от продавцов и авторов решений"], 10);
+    var bits = [];
+    if (!isNaN(jobs)) bits.push('<b class="r-num">' + jobs + "</b> " + plural(jobs, "эпизод", "эпизода", "эпизодов") + " о работе");
+    if (!isNaN(sellers)) bits.push('<b class="r-num">' + sellers + "</b> " + plural(sellers, "голос", "голоса", "голосов") + " продавцов");
+    if (p["самый частый сайт"]) bits.push('<span class="site">частый сайт ' + esc(p["самый частый сайт"]) + "</span>");
+    if (!bits.length) return "";
+    return '<li><p class="sc-file mono">' + esc(base(f)) + '</p><p class="sc-nums">' + bits.join(" · ") + "</p>" +
+      (note ? '<p class="sc-note">' + esc(first(clean(note))) + "</p>" : "") + "</li>";
+  }
+
+  function resCollect(s) {
+    var out = "", scores = [], prices = [], seen = {};
+    stepFiles(s).forEach(function (f) {
+      var md = files[f];
+      var line = (counts.evidence || {})[f] || lines(md).filter(function (l) { return /^Счёт:/.test(l); })[0];
+      if (line) { var r = scoreRow(f, line); if (r) scores.push(r); }
+      var money = md ? section(md, "Деньги") : null;
+      if (money) items(money.lines).forEach(function (t) {
+        if (isQuote(t)) return;
+        var i = t.indexOf("«");
+        var v = cut(clean(trimTail(i >= 0 ? t.slice(0, i) : t) + "."));
+        if (v.length > 1 && !seen[v]) { seen[v] = true; prices.push(v); }
+      });
+    });
+    if (scores.length) out += '<div class="r-group">' + label("Что нашли") + '<ul class="sc-rows">' + scores.join("") + "</ul></div>";
+    if (prices.length) {
+      out += '<div class="r-group">' + label("Деньги", prices.length) + '<ul class="r-list">' + prices.map(function (v) {
+        var kv = nameSplit(v);
+        return "<li>" + (kv ? "<b>" + esc(kv[0]) + "</b>" + kv[2] + " " + esc(kv[1]) : esc(v)) + "</li>";
+      }).join("") + "</ul></div>";
+    }
+    return out;
+  }
+
+  function resCheck(s) {
+    var line = counts.quotes;
+    if (!line) {
+      var sec = section(fileOf(s, "check.md"), "Сверка цитат");
+      line = sec ? sec.lines.filter(function (l) { return /^Цитат:/.test(l); })[0] : "";
+    }
+    if (!line) return "";
+    var NAMES = { "Цитат": "цитат всего", "Нашлись": "нашлись в снимках", "Неточно": "неточно", "Зачёркнуты": "зачёркнуты",
+                  "Ошибок формата": "ошибок формата", "Из выписок модели": "из выписок модели" };
+    var KEEP = { "Цитат": 1, "Нашлись": 1, "Зачёркнуты": 1, "Из выписок модели": 1 };
+    var figs = [];
+    line.replace(/([А-ЯЁа-яё][А-ЯЁа-яё ]*?):\s*(\d+)/g, function (_, k, n) {
+      k = k.trim();
+      if (KEEP[k] || +n > 0) figs.push({ n: n, k: NAMES[k] || k.toLowerCase() });
+      return _;
+    });
+    if (!figs.length) return "";
+    return '<div class="figs">' + figs.map(function (f) {
+      return '<p class="fig' + (+f.n === 0 ? " zero" : "") + '"><b>' + esc(f.n) + "</b><span>" + esc(f.k) + "</span></p>";
+    }).join("") + "</div>";
+  }
+
+  function resReview(s) {
+    var md = fileOf(s, "check.md");
+    var rounds = blocks(md, 2).map(function (b) {
+      var m = /^Проверка карты, круг (\d+)/.exec(b.title);
+      return m ? { n: m[1], lines: b.lines } : null;
+    }).filter(Boolean);
+    return rounds.map(function (r) {
+      var head = r.lines.map(clean).filter(function (l) { return /^Нарушений:/.test(l); })[0] || "";
+      var m = /^Нарушений:\s*(\d+)(?:,\s*из них спорно:\s*(\d+))?/.exec(head);
+      var title = "Круг " + r.n;
+      if (m) title += " — " + (+m[1] === 0 ? "нарушений нет" : "нарушений " + m[1] + (m[2] && +m[2] ? ", спорно " + m[2] : ""));
+      var bl = items(r.lines).filter(function (t) { return !isQuote(t); }).map(function (t) {
+        t = clean(t);
+        var disputed = /Спорно\.?\s*$/.test(t);
+        var main = t.split(/\s*Исправить:/)[0].trim();
+        var kv = splitAt(main, ": ");
+        return "<li>" + (kv ? '<span class="r-key">' + esc(kv[0]) + ":</span> " + esc(cut(kv[1])) : esc(cut(main))) +
+          (disputed ? ' <span class="tag">спорно</span>' : "") + "</li>";
+      });
+      return '<div class="r-group"><p class="r-round">' + esc(title) + "</p>" +
+        (bl.length ? '<ul class="r-list">' + bl.join("") + "</ul>" : "") + "</div>";
+    }).join("");
+  }
+
+  // Сегменты раздела с подзаголовками «### …»: имя и одна строка-поле; простые пункты — отдельными кандидатами.
+  function segGroup(name, ls, key) {
+    var list = [], text = [], cur = null;
+    ls.forEach(function (l) {
+      var h = /^###\s+(.+)$/.exec(l);
+      if (h) { cur = { name: clean(h[1]), why: "", k: key }; list.push(cur); return; }
+      if (/^[-*]\s+/.test(l)) {
+        var t = l.replace(/^[-*]\s+/, "");
+        if (isQuote(t)) return;
+        var f = /^([^:«»—,\[]{2,48}):\s+(.*)$/.exec(t);
+        if (cur && f) {
+          if (!cur.why && f[1].trim().indexOf(key) === 0) cur.why = first(clean(f[2]));
+          return;
+        }
+        var c = clean(t), nm = trimTail(c.split(/[«—]/)[0]), rest = splitAt(c, " — ");
+        if (nm) list.push({ name: nm, why: rest ? first(rest[1]) : "" });
+        cur = null;
+        return;
+      }
+      var p = clean(l);
+      if (p && !cur && !isQuote(p) && !/^#/.test(p)) text.push(cap(cut(p)));
+    });
+    if (!list.length && !text.length) return "";
+    return '<div class="r-group">' + label(name, list.length) +
+      text.map(function (p) { return '<p class="r-none">' + esc(p) + "</p>"; }).join("") +
+      (list.length ? '<ul class="segs">' + list.map(function (g) {
+        var id = /^([СC]\d+)\.\s+(.*)$/.exec(g.name);
+        return '<li><p class="seg-name">' + (id ? '<span class="seg-id mono">' + esc(id[1]) + "</span>" + esc(id[2]) : esc(g.name)) + "</p>" +
+          (g.why ? '<p class="seg-why">' + (g.k ? '<span class="seg-k">' + esc(g.k) + ":</span> " : "") + esc(g.why) + "</p>" : "") + "</li>";
+      }).join("") + "</ul>" : "") + "</div>";
+  }
+  function plainGroup(name, ls) {
+    var list = items(ls).filter(function (t) { return !isQuote(t); }).map(function (t) {
+      var one = first(clean(t)), kv = splitAt(one, ": ");
+      return kv && kv[0].length <= 60 ? { name: kv[0], why: kv[1] } : { name: trimTail(one), why: "" };
+    });
+    if (!list.length) return "";
+    return '<div class="r-group">' + label(name, list.length) + '<ul class="segs minor">' + list.map(function (g) {
+      return '<li><p class="seg-name">' + esc(g.name) + "</p>" + (g.why ? '<p class="seg-why">' + esc(g.why) + "</p>" : "") + "</li>";
+    }).join("") + "</ul></div>";
+  }
+
+  function resMap(s) {
+    var md = fileOf(s, "segments.md");
+    if (!md) return "";
+    var ls = lines(md), i = 0, intro = [];
+    while (i < ls.length && !/^#\s/.test(ls[i]) && !/^#{2,6}\s/.test(ls[i])) i++;
+    if (i < ls.length && /^#\s/.test(ls[i])) i++; else i = 0;
+    for (; i < ls.length && !/^#{1,6}\s/.test(ls[i]); i++) {
+      var t = clean(ls[i]);
+      if (t && !isQuote(t)) intro.push(cut(t, 300));
+    }
+    var out = intro.map(function (p) { return '<p class="r-lead">' + esc(p) + "</p>"; }).join("");
+    if (intro.length) out = '<div class="r-group">' + out + "</div>";
+    var live = section(md, "Живые сегменты"), look = section(md, "Где искать");
+    if (live) out += segGroup("Живые сегменты", live.lines, "Работа и первый критерий");
+    if (look) out += segGroup("Где искать", look.lines, "Почему не живой");
+    ["Пользователи одного продукта", "Соседние рынки"].forEach(function (name) {
+      var b = section(md, name);
+      if (b) out += plainGroup(name, b.lines);
+    });
+    var market = section(md, "Рынок с деньгами"), mrows = [];
+    if (market) items(market.lines).forEach(function (t) {
+      var kv = splitAt(t, ": ");
+      if (kv && /^(Трата за 12 месяцев|Цель и доля)/.test(kv[0].trim())) mrows.push({ k: kv[0].trim(), v: first(clean(kv[1])) });
+    });
+    if (mrows.length) out += '<div class="r-group">' + label("Рынок с деньгами") + rows(mrows) + "</div>";
+    return out;
+  }
+
+  function resCard(s) {
+    var md = fileOf(s, "card.md");
+    if (!md) return "";
+    var ans = section(md, "Ответ");
+    var al = ans ? ans.lines.map(clean).filter(Boolean) : [];
+    var out = al.length ? '<div class="answer">' + al.map(function (l, i) {
+      return "<p>" + (i === 0 ? verdictHtml(l) : esc(l)) + "</p>";
+    }).join("") + "</div>" : "";
+    var what = "", gate = "";
+    var chk = blocks(md, 2).filter(function (b) { return /^Самая дешёвая проверка/.test(b.title); })[0];
+    if (chk) items(chk.lines).forEach(function (t) {
+      var kv = splitAt(t, ": ");
+      if (!kv) return;
+      if (!what && /^Что проверяем/.test(kv[0])) what = kv[1];
+      if (!gate && /^Порог/.test(kv[0])) gate = kv[1];
+    });
+    var unk = section(md, "Не знаем"), un = unk ? items(unk.lines).length : 0;
+    out += rows([
+      { k: "Что проверяем", v: cut(clean(what)) },
+      gate ? { k: "Порог", html: clean(gate).split(/\s*\|\s*/).map(function (p) { return "<p>" + esc(cap(cut(p))) + "</p>"; }).join("") } : null,
+      un ? { k: "Не знаем", v: un + " " + plural(un, "пункт", "пункта", "пунктов") } : null
+    ]);
+    return out;
+  }
+
+  var RESULT = { brief: resBrief, collect: resCollect, check: resCheck, map: resMap, review: resReview, card: resCard };
+  // Своё поле result в status.json важнее разбора; идущий шаг результата не показывает.
+  function stepResult(s) {
+    if (typeof s.result === "string" && s.result.trim()) return { md: s.result };
+    if (s.status !== "done" && s.status !== "waiting") return null;
+    var fn = RESULT[s.id];
+    if (!fn) return null;
+    try {
+      var html = fn(s);
+      return html ? { html: html } : null;
+    } catch (e) {
+      if (window.console) console.warn("результат шага " + s.id + " не разобран", e);
+      return null;
+    }
+  }
+
+  // Шапка
+  function renderHead() {
+    $("run-id").textContent = data.run || "";
+    $("run-title").textContent = data.title || data.run || "Прогон";
+    if (data.idea) { $("run-idea").textContent = data.idea; $("run-idea").hidden = false; }
+    try {
+      var card = steps.filter(function (s) { return s.id === "card"; })[0];
+      var ans = section(card ? fileOf(card, "card.md") : files["card.md"], "Ответ");
+      var top = ans ? ans.lines.map(clean).filter(Boolean)[0] : "";
+      if (top) {
+        $("run-verdict").innerHTML = '<p class="r-label">Ответ карточки' + (card && card.status !== "done" ? " · карточка ещё пишется" : "") + "</p>" +
+          '<p class="verdict-text">' + verdictHtml(top) + "</p>";
+        $("run-verdict").hidden = false;
+      }
+    } catch (e) { /* без итога: карточки нет или она не разобралась */ }
+    var cur =steps.filter(function (s) { return s.status === "waiting"; })[0] ||
+              steps.filter(function (s) { return s.status === "running"; })[0];
+    var allDone = steps.length && steps.every(function (s) { return s.status === "done" || s.status === "skipped"; });
+    var line;
+    if (cur && cur.status === "waiting") line = (stand ? "Ждёт ответа автора" : "Ждёт твоего ответа") + ": <strong>шаг " + esc(cur.n) + ", " + esc(cur.title) + "</strong>";
+    else if (cur) line = "Идёт <strong>шаг " + esc(cur.n) + ", " + esc(cur.title) + "</strong>";
+    else if (allDone) line = "<strong>Прогон закончен</strong>";
+    else line = "Шаг не идёт";
+    if (data.updated) line += " · обновлено " + esc(data.updated);
+    var bar = steps.map(function (s) {
+      return '<span data-status="' + esc(s.status) + '" title="' + esc(s.n + " " + s.title) + '"></span>';
+    }).join("");
+    // Кто ведёт прогон — из шапки notes.md; кладёт push_run.py.
+    var who = data.author ? "<p>Ведёт: " + esc(data.author) + (data.engine ? " · " + esc(data.engine) : "") + "</p>" : "";
+    $("run-state").innerHTML = '<div class="bar" aria-hidden="true">' + bar + "</div><p>" + line + "</p>" + who;
+  }
+
+  // Шаги
+  var openSet = {};
+  try { (JSON.parse(getItem("local", runKey + ":open") || "[]") || []).forEach(function (id) { openSet[id] = true; }); }
+  catch (e) { /* пусто */ }
+  var shownTab = {};
+
+  // Шаг: заголовок, результат без клика, ответы Андрея, «Подробнее» — сводка, счёт и файлы.
+  function renderSteps() {
+    var results = steps.map(stepResult);
+    $("steps").innerHTML = steps.map(function (s, i) {
+      var m = MARK[s.status] || MARK.next;
+      var res = results[i];
+      var docs = stepFiles(s).filter(function (f) { return typeof files[f] === "string"; });
+      var facts = stepFacts(s);
+      var hiddenSummary = res && s.summary;
+      var more = docs.length > 0 || facts.length > 0 || !!hiddenSummary;
+      var open = more && !!openSet[s.id];
+      var sid = "step-" + i;
+      var mine = answers.filter(function (a) { return a.step === s.id; });
+      var hint = docs.length === 1 ? base(docs[0]) : docs.length > 1 ? docs.length + " " + plural(docs.length, "файл", "файла", "файлов") : "";
+      return '<li class="step" data-status="' + esc(s.status) + '" data-id="' + esc(s.id) + '">' +
+        '<span class="num mono">' + esc(s.n) + "</span>" +
+        '<span class="rail"><span class="mark">' + icon(m.icon) + '<span class="sr-only">' + m.word + "</span></span></span>" +
+        '<div class="step-main">' +
+          '<div class="step-line"><span class="step-title">' + esc(s.title) + "</span>" +
+            (m.chip ? '<span class="chip">' + m.chip + "</span>" : "") +
+            '<span class="when mono">' + esc(stepWhen(s)) + "</span></div>" +
+          (res ? '<div class="result">' + (res.md ? '<div class="md" data-result="' + i + '"></div>' : res.html) + "</div>"
+               : s.summary ? '<p class="summary' + (s.status === "done" || s.status === "waiting" ? " as-result" : "") + '">' + esc(s.summary) + "</p>" : "") +
+          (mine.length ? '<ul class="replies">' + mine.map(function (a) {
+            return '<li class="reply">' + icon("corner-down-right") + "<div>" +
+              '<p class="reply-q">' + esc((a.at ? a.at + " · " : "") + (a.text || "Вопрос")) + "</p>" +
+              '<p class="reply-a">' + esc(a.answer) + "</p></div></li>";
+          }).join("") + "</ul>" : "") +
+          (more ? '<button type="button" class="more-btn" id="' + sid + '-btn" aria-expanded="' + open + '" aria-controls="' + sid + '-more">' +
+              icon("chevron-down") + "Подробнее" + (hint ? '<span class="mono">' + esc(hint) + "</span>" : "") + "</button>" +
+            '<div class="more" id="' + sid + '-more"' + (open ? "" : " hidden") + ">" +
+            (hiddenSummary ? '<p class="summary">' + esc(s.summary) + "</p>" : "") +
+            (facts.length ? '<dl class="facts">' + facts.map(function (f) {
+              return '<div class="fact"><dt' + (f.mono ? ' class="mono"' : "") + ">" + esc(f.k) + "</dt><dd>" + esc(f.v) + "</dd></div>";
+            }).join("") + "</dl>" : "") +
+            (docs.length ? '<div class="doc" data-docs="' + esc(JSON.stringify(docs)) + '"></div>' +
+              '<button type="button" class="fold">' + icon("chevron-up") + "Свернуть</button>" : "") +
+          "</div>" : "") +
+        "</div></li>";
+    }).join("");
+    $("steps").querySelectorAll("[data-result]").forEach(function (el) {
+      renderMarkdown(el, steps[+el.getAttribute("data-result")].result);
+    });
+    $("steps").querySelectorAll(".step").forEach(function (li) {
+      var more = li.querySelector(".more");
+      if (more && !more.hidden) showDoc(li);
+    });
+    drawIcons($("steps"));
+  }
+
+  function showDoc(li) {
+    var box = li.querySelector(".doc");
+    if (!box) return;
+    var id = li.getAttribute("data-id");
+    var docs = JSON.parse(box.getAttribute("data-docs"));
+    var cur = docs.indexOf(shownTab[id]) >= 0 ? shownTab[id] : docs[0];
+    shownTab[id] = cur;
+    var tabs = docs.length > 1
+      ? '<div class="tabs" role="tablist" aria-label="Файлы шага">' + docs.map(function (f) {
+          return '<button type="button" class="tab" role="tab" aria-selected="' + (f === cur) + '" data-file="' + esc(f) + '" title="' + esc(f) + '">' + esc(base(f)) + "</button>";
+        }).join("") + "</div>"
+      : '<div class="tabs"><span class="tab" aria-selected="true" title="' + esc(cur) + '">' + esc(base(cur)) + "</span></div>";
+    var gh = links[cur] ? '<a class="gh" href="' + esc(links[cur]) + '" target="_blank" rel="noopener noreferrer">GitHub' + icon("arrow-up-right") + "</a>" : "";
+    box.innerHTML = '<div class="doc-bar">' + tabs + gh + '</div><article class="md"' + (docs.length > 1 ? ' role="tabpanel"' : "") + "></article>";
+    renderMarkdown(box.querySelector(".md"), files[cur]);
+    drawIcons(box);
+  }
+
+  $("steps").addEventListener("click", function (ev) {
+    var li = ev.target.closest(".step");
+    if (!li) return;
+    var id = li.getAttribute("data-id");
+    var tab = ev.target.closest("button.tab");
+    if (tab) { shownTab[id] = tab.getAttribute("data-file"); showDoc(li); li.querySelector('.tab[aria-selected="true"]').focus(); return; }
+    var toggle = ev.target.closest(".more-btn");
+    var fold = ev.target.closest(".fold");
+    if (!toggle && !fold) return;
+    var more = li.querySelector(".more");
+    var btn = li.querySelector(".more-btn");
+    var open = fold ? false : more.hidden;
+    more.hidden = !open;
+    btn.setAttribute("aria-expanded", String(open));
+    if (open) { openSet[id] = true; showDoc(li); } else { delete openSet[id]; }
+    if (fold) { btn.focus(); if (btn.getBoundingClientRect().top < 0) btn.scrollIntoView({ block: "center" }); }
+    setItem("local", runKey + ":open", JSON.stringify(Object.keys(openSet)));
+  });
+
+  // Журнал из notes.md
+  function renderLog() {
+    var rows = (data.timeline || []).slice().reverse();
+    if (!rows.length) { $("log").innerHTML = '<li class="empty">Записей в notes.md пока нет.</li>'; return; }
+    var day = null;
+    $("log").innerHTML = rows.map(function (r) {
+      var meta = [];
+      if (r.model) meta.push(r.model);
+      if (r.minutes && r.minutes !== "неизвестно" && r.minutes !== "0") meta.push(r.minutes + " мин");
+      if (r.tokens && r.tokens !== "неизвестно" && r.tokens !== "0") meta.push(String(r.tokens).replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " токенов");
+      var sep = r.date !== day ? '<li class="day mono">' + esc(r.date) + "</li>" : "";
+      day = r.date;
+      return sep + '<li class="ev"><time class="mono">' + esc(r.time) + "</time><div>" +
+        '<p class="ev-label">' + esc(r.label) + "</p>" +
+        '<p class="ev-text">' + esc(r.text) + "</p>" +
+        (meta.length ? '<p class="ev-meta mono">' + esc(meta.join(" · ")) + "</p>" : "") +
+        "</div></li>";
+    }).join("");
+  }
+
+  // Вопрос Андрею и ответ, который страница публикует в себя
+  var artifactP = (window.claude && typeof window.claude.use === "function")
+    ? window.claude.use("artifact").catch(function () { return null; })
+    : Promise.resolve(null);
+
+  // Вопросы списком: строка на вопрос, номера сквозные, их ставит страница — номер «3. » в начале
+  // строки убираем. Метка [Расхождение] или [Вопрос] собирает строки под заголовок.
+  // Полей ответа нет: отвечают в чате.
+  var ITEM_GROUPS = { "Расхождение": "Расхождения", "Вопрос": "Вопросы" };
+  var ITEM_HEAD = /^(?:\d+[.)]\s+)?(?:\[(Расхождение|Вопрос)\]\s*)?(?:\d+[.)]\s+)?/;
+  function askItems(list) {
+    var out = "", kind = null, n = 0;
+    list.forEach(function (it) {
+      var t = String(typeof it === "string" ? it : (it && it.text) || "").trim();
+      var m = ITEM_HEAD.exec(t), k = m[1] || "";
+      t = t.slice(m[0].length);
+      if (!t) return;
+      if (k !== kind) {
+        if (kind !== null) out += "</ol>";
+        out += (k ? label(ITEM_GROUPS[k]) : "") + '<ol class="ask-items" start="' + (n + 1) + '">';
+        kind = k;
+      }
+      n++;
+      out += "<li>" + esc(t) + "</li>";
+    });
+    return n ? '<div class="ask-list" id="ask-list">' + out + "</ol></div>" : "";
+  }
+
+  function renderAsk() {
+    var q = data.question;
+    var box = $("ask");
+    var last = answers[answers.length - 1];
+    if (!q && last && last.pending === true) {
+      box.innerHTML = '<p class="ask-calm ask-saved">' + icon("message-circle") + "<span>Ответ сохранён. Напиши в чате «ответил», чтобы прогон пошёл дальше.</span></p>";
+      drawIcons(box);
+      return;
+    }
+    if (!q) {
+      box.innerHTML = '<p class="ask-calm">' + icon("circle-check") + "<span>" + (stand ? "Вопросов к автору нет" : "Вопросов к тебе нет") + ". Страница обновится, когда закроется шаг.</span></p>";
+      drawIcons(box);
+      return;
+    }
+    var step = steps.filter(function (s) { return s.id === q.step; })[0];
+    var draftKey = runKey + ":draft:" + q.id;
+    var opts = Array.isArray(q.options) ? q.options : [];
+    var itemsHtml = askItems(Array.isArray(q.items) ? q.items : []);
+    box.innerHTML = '<div class="ask-open">' +
+      '<p class="ask-eyebrow"><span class="ask-need">' + icon("hand") + (stand ? "Нужен ответ автора" : "Нужен твой ответ") + "</span>" +
+        (step || q.asked ? '<span class="ask-meta">' + esc([step ? "шаг " + step.n + ", " + step.title : "", q.asked ? "спрошено " + q.asked : ""]
+          .filter(Boolean).join(" · ")) + "</span>" : "") + "</p>" +
+      (q.text ? '<h2 id="ask-q">' + esc(q.text) + "</h2>" : "") +
+      itemsHtml +
+      (stand ? '<p class="ask-note">Ответь в чате сессии, которая ведёт прогон.</p></div>' :
+      '<form id="ask-form"' + (q.text ? ' aria-labelledby="ask-q"' : itemsHtml ? ' aria-labelledby="ask-list"' : "") + " novalidate>" +
+        (opts.length ? '<div class="opts">' + opts.map(function (o, i) {
+          return '<button type="button" class="opt" id="ask-opt-' + i + '" aria-pressed="false">' + esc(o) + "</button>";
+        }).join("") + "</div>" : "") +
+        '<label class="sr-only" for="ask-text">Ответ</label>' +
+        '<textarea id="ask-text" rows="3" placeholder="' + (opts.length ? "Выбери вариант или напиши свой ответ" : "Твой ответ") + '"></textarea>' +
+        '<div class="ask-foot"><p class="ask-note" id="ask-note"></p>' +
+        '<button type="submit" class="send" id="ask-send" disabled>' + icon("send") + "Отправить</button></div>" +
+      "</form></div>");
+    drawIcons(box);
+    if (stand) return;
+
+    var form = $("ask-form"), text = $("ask-text"), send = $("ask-send"), note = $("ask-note");
+    var buttons = box.querySelectorAll(".opt");
+    var locked = false;
+    function sync() {
+      buttons.forEach(function (b) { b.setAttribute("aria-pressed", String(b.textContent === text.value.trim())); });
+      send.disabled = locked || !text.value.trim();
+    }
+    function say(msg) { note.textContent = msg; }
+    function readOnly() {
+      locked = true;
+      buttons.forEach(function (b) { b.disabled = true; });
+      text.disabled = true;
+      send.disabled = true;
+      say("Ответить здесь нельзя. Ответь в чате.");
+    }
+    text.value = getItem("session", draftKey) || "";
+    sync();
+    buttons.forEach(function (b) {
+      b.addEventListener("click", function () { text.value = b.textContent; setItem("session", draftKey, text.value); sync(); text.focus(); });
+    });
+    text.addEventListener("input", function () { setItem("session", draftKey, text.value); sync(); });
+    text.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); if (!send.disabled) form.requestSubmit(); }
+    });
+    artifactP.then(function (art) { if (!art || typeof data.template !== "string") readOnly(); });
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var answer = text.value.trim();
+      if (!answer || locked) return;
+      locked = true; sync();
+      say("Сохраняю ответ…");
+      setItem("session", draftKey, text.value);
+      var now = new Date();
+      var at = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
+      var next = JSON.parse(JSON.stringify(data));
+      // pending снимает главная сессия, когда переносит ответ; до того страница просит написать в чате.
+      next.answers = answers.concat([{ id: q.id, step: q.step, text: q.text, answer: answer, at: at, pending: true }]);
+      next.question = null;
+      artifactP.then(function (art) {
+        if (!art || typeof data.template !== "string") { readOnly(); return; }
+        return art.publish(HEAD + fill(data.template, next) + TAIL).then(function () {
+          say("Ответ сохранён. Напиши в чате «ответил», чтобы прогон пошёл дальше.");
+        }, function (err) {
+          var code = err && err.code;
+          if (code === "conflict") { say("Страница обновилась, ответь ещё раз."); return; }
+          if (READ_ONLY.indexOf(code) >= 0) { readOnly(); return; }
+          locked = false; sync();
+          say("Не сохранилось" + (code ? " (" + code + ")" : "") + ". Попробуй ещё раз или ответь в чате.");
+        });
+      });
+    });
+  }
+
+  renderHead();
+  renderAsk();
+  renderSteps();
+  renderLog();
+  drawIcons(document);
+
+  // Стенд: пока прогон идёт, страница перечитывает себя раз в 30 с, только на видимой вкладке.
+  if (stand && steps.some(function (s) { return s.status !== "done" && s.status !== "skipped"; })) {
+    var timer = null;
+    var arm = function () {
+      clearTimeout(timer);
+      timer = document.visibilityState === "visible" ? setTimeout(function () { location.reload(); }, 30000) : null;
+    };
+    document.addEventListener("visibilitychange", arm);
+    arm();
+  }
+})();
+</script>
