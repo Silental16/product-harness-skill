@@ -6,11 +6,15 @@
 RUN/.stand.json, и следующие отправки с ним обновляют ту же страницу. Печатает ссылку
 страницы. Любая ошибка — одна строка «стенд: …» в stderr и код 1, ключ остаётся прежним.
 
+Ветку и коммит скилла берёт из git, если скилл лежит в репозитории product-harness, иначе
+из файла VERSION рядом со SKILL.md. Не вышло — версия пустая, отправка идёт.
+
   push_run.py --run RUN [--stand URL]     адрес: --stand, иначе HARNESS_STAND_URL, иначе STAND"""
 import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -25,6 +29,9 @@ EXTRA = ("input.md", "author-answers.md", "notes.md")
 LIMIT = 4_000_000  # байт тела; больше стенд не примет
 TIMEOUT = 30
 AUTHOR_RE = re.compile(r"^Ведёт: (.+?)\. Движок: (.+?), главная модель: (.+?)\.?\s*$", re.M)
+SKILL_DIR = Path(__file__).resolve().parents[1]
+GIT_TIMEOUT = 5  # секунд на один вызов git
+VERSION_RE = re.compile(r"^(\S+) ([0-9a-f]{4,40}\+?)$")
 
 
 class Failure(Exception):
@@ -55,6 +62,46 @@ def verdict(run):
     return next((ln.strip() for ln in ui.section(md, "Ответ").splitlines() if ln.strip()), None)
 
 
+def git(skill_dir, *args):
+    """Вывод git-команды в папке скилла; код не 0 — None. Нет git или таймаут — исключение."""
+    r = subprocess.run(["git", "--no-optional-locks", "-C", str(skill_dir), *args], stdin=subprocess.DEVNULL,
+                       capture_output=True, encoding="utf-8", errors="replace", timeout=GIT_TIMEOUT)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def git_version(skill_dir):
+    """(ветка, коммит) из git, только если это репозиторий product-harness со скиллом на своём месте.
+
+    Скилл в чужом репозитории (например, в ~/.claude с дотфайлами) — None: коммит того
+    репозитория не версия скилла."""
+    if git(skill_dir, "rev-parse", "--show-prefix") != "skills/product-harness/":
+        return None
+    origin = (git(skill_dir, "config", "--get", "remote.origin.url") or "").rstrip("/")
+    if not origin.endswith(("/product-harness", "/product-harness.git")):
+        return None
+    commit = git(skill_dir, "rev-parse", "--short", "HEAD")
+    if not commit:
+        return None
+    if git(skill_dir, "status", "--porcelain", "--", "."):
+        commit += "+"  # в папке скилла есть незакоммиченные правки
+    return git(skill_dir, "symbolic-ref", "--short", "-q", "HEAD") or None, commit
+
+
+def skill_version(skill_dir=SKILL_DIR):
+    """(ветка, коммит) скилла: из git, иначе из VERSION («<ветка> <коммит>»), иначе (None, None)."""
+    try:
+        got = git_version(skill_dir)
+    except Exception:  # нет git, таймаут, любой другой сбой — читаем VERSION
+        got = None
+    if got:
+        return got
+    try:
+        m = VERSION_RE.match((skill_dir / "VERSION").read_text(encoding="utf-8").strip())
+    except Exception:  # нет файла, не читается, не UTF-8
+        return None, None
+    return m.groups() if m else (None, None)
+
+
 def payload(run):
     data = ui.build_data(run)
     files = data["files"]
@@ -66,6 +113,7 @@ def payload(run):
     data["author"], data["engine"] = author, engine  # шапка страницы: «Ведёт: …»
     meta = {"run": run.name, "title": data.get("title"), "author": author, "engine": engine, "model": model,
             "step": current(data["steps"]), "state": state(data["steps"]), "verdict": verdict(run)}
+    meta["skill_branch"], meta["skill_commit"] = skill_version()
     return {"meta": meta, "data": data}
 
 

@@ -5,6 +5,7 @@ import io
 import json
 import os
 import socket
+import subprocess
 import sys
 import tempfile
 import threading
@@ -287,6 +288,128 @@ class PushRunTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(pr.stand_url(None), "https://product-harness-stand.vercel.app")
         self.assertEqual(pr.STAND, "https://product-harness-stand.vercel.app")
+
+    # версия скилла
+
+    def test_payload_meta_has_skill_version(self):
+        with mock.patch.object(pr, "skill_version", return_value=("lena/collect", "1a2b3c4+")):
+            meta = pr.payload(self.run)["meta"]
+        self.assertEqual((meta["skill_branch"], meta["skill_commit"]), ("lena/collect", "1a2b3c4+"))
+        meta = pr.payload(self.run)["meta"]  # настоящая папка скилла: ключи есть всегда, пусть и None
+        self.assertIn("skill_branch", meta)
+        self.assertIn("skill_commit", meta)
+        self.assertEqual(pr.SKILL_DIR, Path(pr.__file__).resolve().parents[1])
+
+
+# Временные репозитории: без глобального и системного конфига git, без поиска репозитория выше папки теста.
+GIT_ENV = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+
+
+class SkillVersionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name).resolve()
+        env = mock.patch.dict(os.environ, dict(GIT_ENV, GIT_CEILING_DIRECTORIES=str(self.root)))
+        env.start()
+        self.addCleanup(env.stop)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def git(self, repo, *args):
+        out = subprocess.run(["git", "-c", "user.name=Тест", "-c", "user.email=test@example.com",
+                              "-c", "commit.gpgsign=false", "-c", "core.hooksPath=" + os.devnull, *args],
+                             cwd=repo, check=True, capture_output=True, text=True)
+        return out.stdout.strip()
+
+    def repo(self, origin, name="repo", branch="lena/collect"):
+        """Репозиторий с origin и скиллом в skills/product-harness/; вернёт папку скилла."""
+        repo = self.root / name
+        skill = repo / "skills" / "product-harness"
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text("# Скилл\n", encoding="utf-8")
+        (repo / "README.md").write_text("# Репозиторий\n", encoding="utf-8")
+        self.git(repo, "init", "-q", "-b", branch)
+        self.git(repo, "remote", "add", "origin", origin)
+        self.git(repo, "add", "skills/product-harness/SKILL.md", "README.md")
+        self.git(repo, "commit", "-q", "-m", "первый")
+        return skill
+
+    def head(self, skill):
+        return self.git(skill, "rev-parse", "--short", "HEAD")
+
+    def test_branch_and_commit_from_product_harness(self):
+        for i, origin in enumerate(("https://github.com/Silental16/product-harness.git",
+                                    "git@github.com:lena/product-harness.git",
+                                    "https://github.com/lena/product-harness")):
+            with self.subTest(origin=origin):
+                skill = self.repo(origin, name=f"repo-{i}")
+                self.assertEqual(pr.skill_version(skill), ("lena/collect", self.head(skill)))
+
+    def test_dirty_skill_dir_marks_commit(self):
+        skill = self.repo("https://github.com/Silental16/product-harness.git")
+        sha = self.head(skill)
+        (skill.parents[1] / "README.md").write_text("правка вне скилла\n", encoding="utf-8")
+        self.assertEqual(pr.skill_version(skill), ("lena/collect", sha))
+        (skill / "SKILL.md").write_text("# Скилл, правка\n", encoding="utf-8")
+        self.assertEqual(pr.skill_version(skill), ("lena/collect", sha + "+"))
+
+    def test_detached_head_has_no_branch(self):
+        skill = self.repo("https://github.com/Silental16/product-harness.git")
+        sha = self.head(skill)
+        self.git(skill, "checkout", "-q", "--detach")
+        self.assertEqual(pr.skill_version(skill), (None, sha))
+
+    def test_foreign_repo_reads_version_file(self):
+        # ~/.claude — репозиторий дотфайлов, скилл лежит в нём по тому же пути: его коммит — не версия скилла
+        for i, origin in enumerate(("git@gitlab.com:silental16/claude-dotfiles.git",
+                                    "https://github.com/Silental16/product-harness-skill.git")):
+            with self.subTest(origin=origin):
+                skill = self.repo(origin, name=f"repo-{i}")
+                self.assertEqual(pr.skill_version(skill), (None, None))
+                (skill / "VERSION").write_text("main 1a2b3c4\n", encoding="utf-8")
+                self.assertEqual(pr.skill_version(skill), ("main", "1a2b3c4"))
+
+    def test_product_harness_repo_with_other_prefix_reads_version_file(self):
+        skill = self.repo("https://github.com/Silental16/product-harness.git")
+        other = skill.parents[1] / "copy"
+        other.mkdir()
+        self.assertEqual(pr.skill_version(other), (None, None))
+
+    def test_no_repo(self):
+        skill = self.root / "skills" / "product-harness"
+        skill.mkdir(parents=True)
+        self.assertEqual(pr.skill_version(skill), (None, None))
+        for text in ("", "main\n", "main 1a2b3c4 лишнее\n", "main не-коммит\n", "main 1a2b3c4\nвторая 5d6e7f8\n"):
+            with self.subTest(text=text):
+                (skill / "VERSION").write_text(text, encoding="utf-8")
+                self.assertEqual(pr.skill_version(skill), (None, None))
+        (skill / "VERSION").write_text("main 1a2b3c4\n", encoding="utf-8")
+        self.assertEqual(pr.skill_version(skill), ("main", "1a2b3c4"))
+        (skill / "VERSION").write_bytes(b"\xff\xfe main")
+        self.assertEqual(pr.skill_version(skill), (None, None))
+        self.assertEqual(pr.skill_version(self.root / "нет-такой-папки"), (None, None))
+
+    def test_git_failures_fall_back_to_version_file(self):
+        skill = self.repo("https://github.com/Silental16/product-harness.git")
+        errors = (FileNotFoundError(2, "git"), subprocess.TimeoutExpired(["git"], pr.GIT_TIMEOUT),
+                  PermissionError(13, "git"), RuntimeError("что угодно"))
+        for exc in errors:
+            with self.subTest(exc=type(exc).__name__), \
+                    mock.patch.object(pr.subprocess, "run", side_effect=exc) as run:
+                self.assertEqual(pr.skill_version(skill), (None, None))
+                (skill / "VERSION").write_text("main 1a2b3c4\n", encoding="utf-8")
+                self.assertEqual(pr.skill_version(skill), ("main", "1a2b3c4"))
+                (skill / "VERSION").unlink()
+                self.assertEqual(run.call_args.kwargs["timeout"], pr.GIT_TIMEOUT)
+
+    def test_git_not_in_path(self):
+        skill = self.repo("https://github.com/Silental16/product-harness.git")
+        with mock.patch.dict(os.environ, {"PATH": str(self.root / "пусто")}):
+            self.assertEqual(pr.skill_version(skill), (None, None))
+
+    def test_git_timeout_is_short(self):
+        self.assertLessEqual(pr.GIT_TIMEOUT, 5)
 
 
 if __name__ == "__main__":
