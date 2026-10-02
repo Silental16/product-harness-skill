@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Сверка цитат прогона со снимками страниц.
 
-Находит в evidence/*.md и card.md строки цитат вида
+Находит в evidence/*.md, details.md и card.md строки цитат вида
   «цитата» — [название](URL), дата, src-NNN
 и ищет каждую цитату в sources/src-NNN.txt. Цитату без снимка или без совпадения
 зачёркивает в файле, только в её строке: ~~«цитата»~~. Между цитатой и ссылкой стоит
@@ -98,7 +98,7 @@ def strike_line(line):
 
 def check_run(run):
     files = sorted((run / "evidence").glob("*.md"))
-    files += [run / "card.md"] if (run / "card.md").exists() else []
+    files += [run / name for name in ("details.md", "card.md") if (run / name).exists()]
     rows = []
     for f in files:
         text = f.read_text(encoding="utf-8")

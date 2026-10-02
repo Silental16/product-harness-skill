@@ -79,6 +79,15 @@ class CheckQuotesTests(unittest.TestCase):
         cq.main(["--run", str(self.run)])
         self.assertIn("Цитат: 6. Нашлись: 2.", (self.run / "check.md").read_text(encoding="utf-8"))
 
+    def test_details_md_is_checked(self):
+        details = self.run / "details.md"
+        details.write_text(
+            "- «другие ничего не платят» — [Форум](https://forum.example/t/1), без даты, src-001\n"
+            "- «выдумка подробностей» — [Форум](https://forum.example/t/1), без даты, src-001\n", encoding="utf-8")
+        rows = [(q.file, st) for q, st, _ in cq.check_run(self.run) if q.file == "details.md"]
+        self.assertEqual(rows, [("details.md", "found"), ("details.md", "missing")])
+        self.assertIn("~~«выдумка подробностей»~~", details.read_text(encoding="utf-8"))
+
     def test_check_md_section_is_replaced_not_duplicated(self):
         (self.run / "check.md").write_text("# Проверки прогона\n\n## Проверка карты, круг 1\n\nНарушений: 0.\n",
                                            encoding="utf-8")

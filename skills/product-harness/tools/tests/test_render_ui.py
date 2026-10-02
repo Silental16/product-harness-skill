@@ -114,9 +114,13 @@ class RenderUiTests(unittest.TestCase):
         self.assertEqual([(s["n"], s["id"], s["status"]) for s in steps],
                          [(1, "formula", "next"), (2, "market", "next"), (3, "segments", "next"),
                           (4, "solutions", "next"), (5, "money", "next"), (6, "test", "next"), (7, "card", "next")])
-        self.assertEqual(steps[0]["files"], ["formula.md", "input.md"])
-        self.assertEqual(steps[6]["file"], "card.md")
-        self.assertEqual(steps[6]["section"], ["Главное", "Карта возможностей", "Не знаем"])
+        self.assertEqual(steps[0]["title"], "Разбор запроса")
+        self.assertEqual(steps[0]["files"], ["formula.md", "context.md", "input.md"])
+        self.assertEqual(steps[0]["section"], "Коротко")
+        self.assertEqual(steps[1]["title"], "Ресёрч под проблему")
+        self.assertEqual(steps[1]["section"], ["Проблема в данных", "Что уже есть у нас", "Конкуренты"])
+        self.assertEqual(steps[6]["files"], ["card.md", "details.md"])
+        self.assertEqual(steps[6]["section"], ["Ответ на гипотезу", "Не знаем"])
         self.assertNotIn("result", steps[2])  # шаг next итога не показывает
 
     def test_section_fills_result(self):
